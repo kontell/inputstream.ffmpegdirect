@@ -16,6 +16,10 @@ if ((CORE_SYSTEM_NAME STREQUAL android) OR (CMAKE_CXX_COMPILER MATCHES arm-webos
   list(APPEND zvbi_conf LIBS=-liconv)
 endif()
 
+if(AUTOTOOLS_HOST)
+  list(APPEND zvbi_conf --host=${AUTOTOOLS_HOST})
+endif()
+
 include(ExternalProject)
 externalproject_add(libzvbi
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}

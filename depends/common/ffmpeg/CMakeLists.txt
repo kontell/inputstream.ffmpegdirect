@@ -53,10 +53,33 @@ endif()
 # Run the builds
 include(ExternalProject)
 if(NOT WIN32)
-  if(ENABLE_CCACHE AND CCACHE_PROGRAM)
-    list(APPEND EXTRA_CONF "--cc=${CCACHE_PROGRAM} ${CMAKE_C_COMPILER}" "--cxx=${CCACHE_PROGRAM} ${CMAKE_CXX_COMPILER}")
+  # On Android, CMAKE_C_COMPILER points to the bare NDK clang and relies on
+  # CMake to add --target=/--sysroot=. ffmpeg's autotools configure passes
+  # --cc directly without those flags, so use the versioned NDK clang wrapper
+  # which has the target triple baked in.
+  if(CORE_SYSTEM_NAME STREQUAL android)
+    if(ANDROID_ABI STREQUAL "armeabi-v7a")
+      set(_NDK_TRIPLE "armv7a-linux-androideabi")
+    elseif(ANDROID_ABI STREQUAL "arm64-v8a")
+      set(_NDK_TRIPLE "aarch64-linux-android")
+    elseif(ANDROID_ABI STREQUAL "x86")
+      set(_NDK_TRIPLE "i686-linux-android")
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+      set(_NDK_TRIPLE "x86_64-linux-android")
+    endif()
+    string(REGEX REPLACE "^android-" "" _NDK_API "${ANDROID_PLATFORM}")
+    get_filename_component(_NDK_BIN "${CMAKE_C_COMPILER}" DIRECTORY)
+    set(FFMPEG_CC "${_NDK_BIN}/${_NDK_TRIPLE}${_NDK_API}-clang")
+    set(FFMPEG_CXX "${_NDK_BIN}/${_NDK_TRIPLE}${_NDK_API}-clang++")
   else()
-    list(APPEND EXTRA_CONF --cc=${CMAKE_C_COMPILER} --cxx=${CMAKE_CXX_COMPILER})
+    set(FFMPEG_CC ${CMAKE_C_COMPILER})
+    set(FFMPEG_CXX ${CMAKE_CXX_COMPILER})
+  endif()
+
+  if(ENABLE_CCACHE AND CCACHE_PROGRAM)
+    list(APPEND EXTRA_CONF "--cc=${CCACHE_PROGRAM} ${FFMPEG_CC}" "--cxx=${CCACHE_PROGRAM} ${FFMPEG_CXX}")
+  else()
+    list(APPEND EXTRA_CONF --cc=${FFMPEG_CC} --cxx=${FFMPEG_CXX})
   endif()
 
   if(CMAKE_CROSSCOMPILING)
@@ -136,7 +159,7 @@ if(NOT WIN32)
 
   externalproject_add(ffmpeg
                       SOURCE_DIR ${CMAKE_SOURCE_DIR}
-                      CONFIGURE_COMMAND PKG_CONFIG_PATH=${CMAKE_INSTALL_PREFIX}/lib/pkgconfig ${CMAKE_SOURCE_DIR}/configure
+                      CONFIGURE_COMMAND PKG_CONFIG_PATH=${CMAKE_INSTALL_PREFIX}/lib/pkgconfig PKG_CONFIG_LIBDIR=${CMAKE_INSTALL_PREFIX}/lib/pkgconfig ${CMAKE_SOURCE_DIR}/configure
                         --prefix=${CMAKE_INSTALL_PREFIX}
                         --enable-pthreads
                         --enable-gnutls

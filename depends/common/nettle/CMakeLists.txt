@@ -8,6 +8,10 @@ list(APPEND nettle_conf CPPFLAGS=-I${CMAKE_INSTALL_PREFIX}/include)
 list(APPEND nettle_conf LDFLAGS=-L${CMAKE_INSTALL_PREFIX}/lib)
 list(APPEND nettle_conf LIBS=-lgmp)
 
+if(AUTOTOOLS_HOST)
+  list(APPEND nettle_conf --host=${AUTOTOOLS_HOST})
+endif()
+
 include(ExternalProject)
 externalproject_add(nettle
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}

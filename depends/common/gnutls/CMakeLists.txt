@@ -13,6 +13,10 @@ list(APPEND gnutls_conf CPPFLAGS=-I${CMAKE_INSTALL_PREFIX}/include)
 list(APPEND gnutls_conf LDFLAGS=-L${CMAKE_INSTALL_PREFIX}/lib)
 list(APPEND gnutls_conf LIBS=-lgmp)
 
+if(AUTOTOOLS_HOST)
+  list(APPEND gnutls_conf --host=${AUTOTOOLS_HOST})
+endif()
+
 if(CORE_SYSTEM_NAME STREQUAL darwin_embedded)
   list(APPEND gnutls_conf ac_cv_func_vfork_works=no)
   list(APPEND gnutls_conf ac_cv_func_fork=no)
@@ -36,6 +40,8 @@ externalproject_add(gnutls
                       --disable-guile
                       --disable-tools
                       --with-pic
+                      --without-zstd
+                      --without-brotli
                       ${gnutls_conf})
 
 if(CORE_SYSTEM_NAME STREQUAL darwin_embedded)

@@ -51,6 +51,10 @@ else()
       list(APPEND gmp_conf ABI=32)
   endif()
 
+  if(AUTOTOOLS_HOST)
+    list(APPEND gmp_conf --host=${AUTOTOOLS_HOST})
+  endif()
+
   externalproject_add(gmp
                       SOURCE_DIR ${CMAKE_SOURCE_DIR}
                       PATCH_COMMAND autoreconf -vif
