@@ -66,6 +66,7 @@ FFmpegCatchupStream::~FFmpegCatchupStream()
 bool FFmpegCatchupStream::Open(const std::string& streamUrl, const std::string& mimeType, bool isRealTimeStream, const std::string& programProperty)
 {
   m_isOpeningStream = true;
+  m_timestampNormalizer.Reset();
   bool ret = FFmpegStream::Open(streamUrl, mimeType, isRealTimeStream, programProperty);
 
   m_lastPacketWasAvoidedEOF = false;
@@ -98,9 +99,16 @@ bool FFmpegCatchupStream::DemuxSeekTime(double timeMs, bool backwards, double& s
     if (!m_isOpeningStream)
     {
       DemuxReset();
-      return m_demuxResetOpenSuccess;
+      if (!m_demuxResetOpenSuccess)
+        return false;
     }
 
+    // Reopening the URL establishes a new timestamp origin. No discontinuity
+    // correction from the previous response may carry into the new stream.
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_timestampNormalizer.Reset();
+    m_currentPts = m_seekOffset;
+    m_currentDemuxTime = m_seekOffset / 1000;
     return true;
   }
 
@@ -115,9 +123,40 @@ DEMUX_PACKET* FFmpegCatchupStream::DemuxRead()
   if (pPacket)
   {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    pPacket->pts += m_seekOffset;
-    pPacket->dts += m_seekOffset;
+    if (pPacket->iSize > 0 && pPacket->iStreamId >= 0)
+    {
+      const AVStream* stream = nullptr;
+      if (m_pFormatContext && pPacket->iStreamId < static_cast<int>(m_pFormatContext->nb_streams))
+        stream = m_pFormatContext->streams[pPacket->iStreamId];
+      const bool audioOrVideo = stream &&
+                               (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO ||
+                                stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO);
+      if (m_pFormatContext && (m_pFormatContext->iformat->flags & AVFMT_TS_DISCONT))
+      {
+        if (m_timestampNormalizer.Normalize(pPacket->iStreamId, pPacket->pts, pPacket->dts,
+                                           pPacket->duration, audioOrVideo))
+          Log(LOGLEVEL_DEBUG, "%s - Corrected catchup timestamp discontinuity", __FUNCTION__);
+      }
 
+      if (CatchupTimestampNormalizer::HasTimestamp(pPacket->pts))
+        pPacket->pts += m_seekOffset;
+      if (CatchupTimestampNormalizer::HasTimestamp(pPacket->dts))
+        pPacket->dts += m_seekOffset;
+
+      // Pause/resume and EOF continuation must use the same archive timeline
+      // as the packets supplied to Kodi, rather than the raw source clock.
+      if (audioOrVideo)
+      {
+        const double timestamp = CatchupTimestampNormalizer::HasTimestamp(pPacket->dts)
+                                     ? pPacket->dts
+                                     : pPacket->pts;
+        if (CatchupTimestampNormalizer::HasTimestamp(timestamp))
+        {
+          m_currentPts = timestamp;
+          m_currentDemuxTime = timestamp / 1000;
+        }
+      }
+    }
     if (m_lastPacketResult == AVERROR_EOF && m_catchupTerminates && !m_isOpeningStream && !m_lastSeekWasLive)
     {
       if (!m_lastPacketWasAvoidedEOF)
@@ -135,8 +174,6 @@ DEMUX_PACKET* FFmpegCatchupStream::DemuxRead()
     {
       m_lastPacketWasAvoidedEOF = false;
     }
-
-    m_currentDemuxTime = static_cast<double>(pPacket->pts) / 1000;
   }
 
   return pPacket;
@@ -361,13 +398,6 @@ bool FFmpegCatchupStream::GetTimes(kodi::addon::InputstreamTimes& times)
             times.GetStartTime(), static_cast<long long>(times.GetPtsStart()), static_cast<long long>(times.GetPtsBegin()), static_cast<long long>(times.GetPtsEnd()));
 
   return true;
-}
-
-void FFmpegCatchupStream::CurrentPTSUpdated()
-{
-  FFmpegStream::CurrentPTSUpdated();
-  if (m_currentPts != STREAM_NOPTS_VALUE)
-    m_currentPts += m_seekOffset;
 }
 
 bool FFmpegCatchupStream::IsRealTimeStream()
