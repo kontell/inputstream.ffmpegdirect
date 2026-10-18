@@ -584,6 +584,16 @@ bool FFmpegStream::GetTimes(kodi::addon::InputstreamTimes& times)
   return false;
 }
 
+double FFmpegStream::GetPtsPresentationOffset()
+{
+  // The start ConvertTimestamp() takes off every packet puts a pts back on the container's
+  // clock. A subtitle file keeps its timestamps as they are.
+  if (!m_pFormatContext)
+    return STREAM_NOPTS_VALUE;
+
+  return m_bSup ? 0.0 : StartTime() * STREAM_TIME_BASE;
+}
+
 bool FFmpegStream::PosTime(int ms)
 {
   return SeekTime(static_cast<double>(ms) * 0.001f);
@@ -1091,14 +1101,10 @@ void FFmpegStream::CurrentPTSUpdated()
 {
 }
 
-double FFmpegStream::ConvertTimestamp(int64_t pts, int den, int num)
+double FFmpegStream::StartTime() const
 {
-  if (pts == (int64_t)AV_NOPTS_VALUE)
-    return STREAM_NOPTS_VALUE;
-
-  // do calculations in floats as they can easily overflow otherwise
-  // we don't care for having a completely exact timestamp anyway
-  double timestamp = (double)pts * num / den;
+  // the container's timestamp of this stream's time zero: the format's start time, or a
+  // transport stream's first timestamp
   double starttime = 0.0;
 
   //const std::shared_ptr<CDVDInputStream::IMenus> menuInterface =
@@ -1111,6 +1117,19 @@ double FFmpegStream::ConvertTimestamp(int64_t pts, int den, int num)
 
   if (m_checkTransportStream)
     starttime = m_startTime;
+
+  return starttime;
+}
+
+double FFmpegStream::ConvertTimestamp(int64_t pts, int den, int num)
+{
+  if (pts == (int64_t)AV_NOPTS_VALUE)
+    return STREAM_NOPTS_VALUE;
+
+  // do calculations in floats as they can easily overflow otherwise
+  // we don't care for having a completely exact timestamp anyway
+  double timestamp = (double)pts * num / den;
+  const double starttime = StartTime();
 
   if (!m_bSup)
   {

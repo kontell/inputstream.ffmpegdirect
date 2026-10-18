@@ -18,6 +18,25 @@
 using namespace ffmpegdirect;
 using namespace kodi::tools;
 
+namespace
+{
+
+// The presentation offset is in inputstream API 3.5.0. Built against older headers there is
+// nowhere to put it, and Kodi reads it as unknown.
+template<typename Times>
+auto SetPtsPresentationOffset(Times& times, double offset, int)
+    -> decltype(times.SetPtsPresentationOffset(offset), void())
+{
+  times.SetPtsPresentationOffset(offset);
+}
+
+template<typename Times>
+void SetPtsPresentationOffset(Times&, double, long)
+{
+}
+
+} // unnamed namespace
+
 /***********************************************************
 * InputSteam Client AddOn specific public library functions
 ***********************************************************/
@@ -305,7 +324,11 @@ int InputStreamFFmpegDirect::GetTime()
 
 bool InputStreamFFmpegDirect::GetTimes(kodi::addon::InputstreamTimes& times)
 {
-  return m_stream->GetTimes(times);
+  if (!m_stream->GetTimes(times))
+    return false;
+
+  SetPtsPresentationOffset(times, m_stream->GetPtsPresentationOffset(), 0);
+  return true;
 }
 
 bool InputStreamFFmpegDirect::PosTime(int ms)
