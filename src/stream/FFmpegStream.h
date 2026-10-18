@@ -81,6 +81,7 @@ public:
   virtual int GetTotalTime() override;// { return 20; }
   virtual int GetTime() override;// { return m_displayTime; }
   virtual bool GetTimes(kodi::addon::InputstreamTimes& times) override;
+  virtual double GetPtsPresentationOffset() override;
   virtual bool PosTime(int ms) override;
 
   virtual int GetChapter() override;
@@ -124,6 +125,7 @@ private:
   bool OpenWithCURL(const AVInputFormat* iformat);
   AVDictionary* GetFFMpegOptionsFromInput();
   void ResetVideoStreams();
+  double StartTime() const;
   double ConvertTimestamp(int64_t pts, int den, int num);
   unsigned int HLSSelectProgram();
   int GetNrOfStreams() const;

@@ -40,6 +40,8 @@ public:
   int64_t SeekCatchupStream(double timeMs, bool backwards);
   virtual int64_t LengthStream() override;
   virtual bool GetTimes(kodi::addon::InputstreamTimes& times) override;
+  // Each reopen moves the pts this stream hands out by its own seek offset: not reported.
+  virtual double GetPtsPresentationOffset() override { return STREAM_NOPTS_VALUE; }
   virtual bool IsRealTimeStream() override;
 
 protected:

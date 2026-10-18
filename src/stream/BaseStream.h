@@ -43,6 +43,9 @@ public:
 
   //New
   virtual bool GetTimes(kodi::addon::InputstreamTimes& times) = 0;
+  // What to add to a pts this stream hands out to get the presentation timestamp its container
+  // carries. STREAM_NOPTS_VALUE if unknown.
+  virtual double GetPtsPresentationOffset() { return STREAM_NOPTS_VALUE; }
 
   virtual bool PosTime(int ms) = 0;
 
